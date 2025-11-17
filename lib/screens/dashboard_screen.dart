@@ -21,6 +21,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final auth = context.watch<AuthProvider>();
     final taskProvider = context.watch<TaskProvider>();
 
+    // Ambil token dari AuthProvider
+    final token = auth.token;
+
+    // Load tasks jika token tersedia dan belum dimuat.
+    if (token != null &&
+        taskProvider.tasks.isEmpty &&
+        !taskProvider.isLoading) {
+      Future.microtask(() => taskProvider.loadTasks(token));
+    }
+
     final filteredTasks = taskProvider.tasks.where((task) {
       final matchesSearch =
           task.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
@@ -258,7 +268,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final task = filteredTasks[index];
-                          return _buildTaskCard(task);
+                          return _buildTaskCard(
+                            task,
+                            token!,
+                          ); // Kirim token ke card
                         },
                       ),
               ),
@@ -444,7 +457,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildTaskCard(Task task) {
+  Widget _buildTaskCard(Task task, String token) {
     Color statusColor = _getStatusColor(task.status);
     Color priorityColor = _getPriorityColor(task.priority);
 
@@ -489,7 +502,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       child: const Text('Edit'),
-                      onTap: () => _showEditTaskDialog(task),
+                      onTap: () => _showEditTaskDialog(task, token),
                     ),
                     PopupMenuItem(
                       child: Row(
@@ -499,7 +512,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Text('Delete', style: TextStyle(color: Colors.red)),
                         ],
                       ),
-                      onTap: () => _showDeleteTaskDialog(task.id),
+                      onTap: () => _showDeleteTaskDialog(task.id, token),
                     ),
                   ],
                 ),
@@ -646,6 +659,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final dueDateController = TextEditingController();
     String selectedStatus = 'todo';
     String selectedPriority = 'medium';
+    final auth = context.read<AuthProvider>(); // Ambil AuthProvider
+    final token = auth.token; // Ambil token
+    final taskProvider = context.read<TaskProvider>(); // Ambil TaskProvider
 
     _showTaskDialog(
       context: context,
@@ -658,7 +674,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onStatusChanged: (value) => selectedStatus = value!,
       onPriorityChanged: (value) => selectedPriority = value!,
       onSubmitted: () async {
-        if (titleController.text.isNotEmpty) {
+        if (titleController.text.isNotEmpty && token != null) {
+          // Periksa token
           final newTask = Task(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             title: titleController.text,
@@ -667,21 +684,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             priority: selectedPriority,
             dueDate: dueDateController.text,
             createdAt: DateTime.now().toIso8601String(),
-            userId: context.read<AuthProvider>().user?.id ?? '1',
+            userId: auth.user?.id ?? '1', // Ambil ID user dari AuthProvider
           );
 
-          await context.read<TaskProvider>().addTask(newTask);
+          // Panggil addTask dari TaskProvider dengan token
+          await taskProvider.addTask(token, newTask);
         }
       },
     );
   }
 
-  void _showEditTaskDialog(Task task) {
+  void _showEditTaskDialog(Task task, String token) {
     final titleController = TextEditingController(text: task.title);
     final descriptionController = TextEditingController(text: task.description);
     final dueDateController = TextEditingController(text: task.dueDate);
     String selectedStatus = task.status;
     String selectedPriority = task.priority;
+    final taskProvider = context.read<TaskProvider>(); // Ambil TaskProvider
 
     _showTaskDialog(
       context: context,
@@ -695,6 +714,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onPriorityChanged: (value) => selectedPriority = value!,
       onSubmitted: () async {
         if (titleController.text.isNotEmpty) {
+          // Periksa token
           final updatedTask = Task(
             id: task.id,
             title: titleController.text,
@@ -706,7 +726,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             userId: task.userId,
           );
 
-          await context.read<TaskProvider>().updateTask(task.id, updatedTask);
+          // Panggil updateTask dari TaskProvider dengan token
+          await taskProvider.updateTask(token, task.id, updatedTask);
         }
       },
     );
@@ -879,7 +900,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showDeleteTaskDialog(String taskId) {
+  void _showDeleteTaskDialog(String taskId, String token) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -928,7 +949,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Expanded(
                   child: FilledButton(
                     onPressed: () async {
-                      await context.read<TaskProvider>().deleteTask(taskId);
+                      await context.read<TaskProvider>().deleteTask(
+                        token,
+                        taskId,
+                      );
                       if (mounted) Navigator.pop(context);
                     },
                     style: FilledButton.styleFrom(backgroundColor: Colors.red),
