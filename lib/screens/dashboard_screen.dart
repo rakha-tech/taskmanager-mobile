@@ -536,7 +536,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 _buildStatusChip(task.status, statusColor),
                 _buildPriorityChip(task.priority, priorityColor),
-                if (task.dueDate.isNotEmpty) _buildDateChip(task.dueDate),
+                if (task.dueDate.isNotEmpty)
+                  _buildDateChip(task.formattedDueDate),
               ],
             ),
           ],
@@ -821,13 +822,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final date = await showDatePicker(
                   context: context,
                   initialDate: dueDateController.text.isNotEmpty
-                      ? DateTime.parse(dueDateController.text)
+                      ? _parseDateSafely(dueDateController.text)
                       : DateTime.now(),
                   firstDate: DateTime(2000),
                   lastDate: DateTime(2100),
                 );
                 if (date != null) {
-                  dueDateController.text = date.toString().split(' ')[0];
+                  // Format ke ISO 8601 dengan jam 00:00:00
+                  dueDateController.text = DateTime(
+                    date.year,
+                    date.month,
+                    date.day,
+                  ).toIso8601String();
                 }
               },
             ),
@@ -966,5 +972,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  // Helper method untuk parse date dengan aman
+  DateTime _parseDateSafely(String dateString) {
+    try {
+      return DateTime.parse(dateString);
+    } catch (e) {
+      debugPrint('Error parsing date: $dateString, using current date instead');
+      return DateTime.now();
+    }
   }
 }
